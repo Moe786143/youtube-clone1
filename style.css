@@ -269,6 +269,11 @@ body.dark-mode {
   flex-shrink: 0;
 }
 
+.sidebar-count {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
 .sub-avatar {
   width: 24px;
   height: 24px;
@@ -329,7 +334,7 @@ body.dark-mode {
   background-color: #000;
 }
 
-.thumbnail-container img {
+.thumbnail-main {
   position: absolute;
   top: 0;
   left: 0;
@@ -337,9 +342,10 @@ body.dark-mode {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+  z-index: 0;
 }
 
-.video-card:hover .thumbnail-container img {
+.video-card:hover .thumbnail-main {
   transform: scale(1.05);
 }
 
@@ -351,17 +357,57 @@ body.dark-mode {
   height: 100%;
   object-fit: cover;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
 }
 
-.video-card:hover .preview-gif {
+.thumbnail-container.preview-active .preview-gif {
   opacity: 1;
+}
+
+.watch-later-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.video-card:hover .watch-later-btn,
+.watch-later-btn.saved {
+  opacity: 1;
+}
+
+.watch-later-btn:hover {
+  background-color: rgba(0, 0, 0, 0.95);
+}
+
+.watch-later-btn.saved {
+  color: var(--red);
+}
+
+.watch-later-btn.saved:hover {
+  background-color: rgba(0, 0, 0, 0.95);
+  color: #ffffff;
 }
 
 .video-duration {
   position: absolute;
   bottom: 8px;
   right: 8px;
+  z-index: 2;
   background-color: rgba(0,0,0,0.8);
   color: white;
   font-size: 12px;

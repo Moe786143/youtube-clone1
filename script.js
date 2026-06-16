@@ -174,8 +174,22 @@ const videos = [
 
 // ===== STATE =====
 let currentCategory = 'all';
+let currentView = 'home';
 let searchQuery = '';
 let likedVideos = new Set();
+
+const WATCH_LATER_KEY = 'faketube-watch-later';
+
+function loadWatchLater() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(WATCH_LATER_KEY) || '[]');
+    return new Set(Array.isArray(stored) ? stored : []);
+  } catch {
+    return new Set();
+  }
+}
+
+let watchLaterIds = loadWatchLater();
 
 // ===== DOM =====
 const videoGrid = document.getElementById('videoGrid');
@@ -196,6 +210,10 @@ const modalAvatar = document.getElementById('modalAvatar');
 const likeBtn = document.getElementById('likeBtn');
 const likeCount = document.getElementById('likeCount');
 const relatedGrid = document.getElementById('relatedGrid');
+const homeBtn = document.getElementById('homeBtn');
+const watchLaterBtn = document.getElementById('watchLaterBtn');
+const watchLaterCount = document.getElementById('watchLaterCount');
+const categoryBar = document.getElementById('categoryBar');
 
 // ===== DARK MODE =====
 if (localStorage.getItem('theme') === 'dark') {
@@ -219,9 +237,56 @@ menuBtn.addEventListener('click', () => {
   mainContent.classList.toggle('expanded');
 });
 
+// ===== SIDEBAR NAVIGATION =====
+function setActiveSidebarItem(item) {
+  document.querySelectorAll('.sidebar-item[data-view]').forEach(el => {
+    el.classList.remove('active');
+  });
+  if (item) item.classList.add('active');
+}
+
+homeBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  currentView = 'home';
+  setActiveSidebarItem(homeBtn);
+  categoryBar.hidden = false;
+  renderVideos();
+});
+
+watchLaterBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  currentView = 'watch-later';
+  setActiveSidebarItem(watchLaterBtn);
+  categoryBar.hidden = true;
+  renderVideos();
+});
+
+// ===== WATCH LATER =====
+function saveWatchLater() {
+  localStorage.setItem(WATCH_LATER_KEY, JSON.stringify([...watchLaterIds]));
+  updateWatchLaterCount();
+}
+
+function updateWatchLaterCount() {
+  watchLaterCount.textContent = `(${watchLaterIds.size})`;
+}
+
+function toggleWatchLater(videoId) {
+  if (watchLaterIds.has(videoId)) {
+    watchLaterIds.delete(videoId);
+  } else {
+    watchLaterIds.add(videoId);
+  }
+  saveWatchLater();
+  renderVideos();
+}
+
 // ===== CATEGORY CHIPS =====
 document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
+    currentView = 'home';
+    setActiveSidebarItem(homeBtn);
+    categoryBar.hidden = false;
     document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
     currentCategory = chip.dataset.category;
@@ -244,7 +309,10 @@ searchInput.addEventListener('input', () => {
 // ===== RENDER VIDEOS =====
 function renderVideos() {
   const filtered = videos.filter(v => {
-    const matchCategory = currentCategory === 'all' || v.category === currentCategory;
+    if (currentView === 'watch-later' && !watchLaterIds.has(v.id)) return false;
+    const matchCategory = currentView === 'watch-later' ||
+      currentCategory === 'all' ||
+      v.category === currentCategory;
     const matchSearch = !searchQuery ||
       v.title.toLowerCase().includes(searchQuery) ||
       v.channel.toLowerCase().includes(searchQuery);
@@ -255,6 +323,8 @@ function renderVideos() {
 
   if (filtered.length === 0) {
     noResults.hidden = false;
+    noResults.querySelector('p').textContent =
+      currentView === 'watch-later' ? 'No videos in Watch Later' : 'No videos found';
     return;
   }
 
@@ -264,14 +334,71 @@ function renderVideos() {
   });
 }
 
+// ===== HOVER PREVIEW =====
+const PREVIEW_HOVER_DELAY = 1000;
+const PREVIEW_FRAME_INTERVAL = 800;
+
+function getPreviewFrames(embedId) {
+  return [1, 2, 3].map((n) => `https://img.youtube.com/vi/${embedId}/${n}.jpg`);
+}
+
+function setupHoverPreview(card, embedId) {
+  const container = card.querySelector('.thumbnail-container');
+  const previewImg = card.querySelector('.preview-gif');
+  const frames = getPreviewFrames(embedId);
+
+  let hoverTimer = null;
+  let frameTimer = null;
+  let frameIndex = 0;
+
+  function stopPreview() {
+    clearTimeout(hoverTimer);
+    hoverTimer = null;
+    clearInterval(frameTimer);
+    frameTimer = null;
+    container.classList.remove('preview-active');
+    frameIndex = 0;
+    previewImg.src = frames[0];
+  }
+
+  function startFrameCycle() {
+    frameIndex = 0;
+    previewImg.src = frames[0];
+    frameTimer = setInterval(() => {
+      frameIndex = (frameIndex + 1) % frames.length;
+      previewImg.src = frames[frameIndex];
+    }, PREVIEW_FRAME_INTERVAL);
+  }
+
+  card.addEventListener('mouseenter', () => {
+    frames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+    hoverTimer = setTimeout(() => {
+      container.classList.add('preview-active');
+      startFrameCycle();
+    }, PREVIEW_HOVER_DELAY);
+  });
+
+  card.addEventListener('mouseleave', stopPreview);
+}
+
 // ===== CREATE VIDEO CARD =====
 function createVideoCard(video) {
+  const isSaved = watchLaterIds.has(video.id);
   const card = document.createElement('div');
   card.className = 'video-card';
   card.innerHTML = `
     <div class="thumbnail-container">
-      <img src="${video.thumbnail}" alt="${video.title}" loading="lazy"
+      <img src="${video.thumbnail}" alt="${video.title}" class="thumbnail-main" loading="lazy"
         onerror="this.src='https://via.placeholder.com/480x270/1a1a1a/ffffff?text=Video'" />
+      <img class="preview-gif" src="https://img.youtube.com/vi/${video.embedId}/1.jpg" alt="" aria-hidden="true" />
+      <button class="watch-later-btn${isSaved ? ' saved' : ''}" type="button"
+        aria-label="${isSaved ? 'Remove from Watch Later' : 'Save to Watch Later'}"
+        title="${isSaved ? 'Remove from Watch Later' : 'Watch later'}">
+        <i class="fa-${isSaved ? 'solid' : 'regular'} fa-clock"></i>
+      </button>
       <span class="video-duration">${video.duration}</span>
     </div>
     <div class="video-info">
@@ -286,7 +413,17 @@ function createVideoCard(video) {
     </div>
   `;
 
-  card.addEventListener('click', () => openVideoModal(video));
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('.watch-later-btn')) return;
+    openVideoModal(video);
+  });
+
+  card.querySelector('.watch-later-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleWatchLater(video.id);
+  });
+
+  setupHoverPreview(card, video.embedId);
   return card;
 }
 
@@ -378,4 +515,5 @@ function formatLikes(num) {
 }
 
 // ===== INIT =====
+updateWatchLaterCount();
 renderVideos();
